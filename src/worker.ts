@@ -19,14 +19,8 @@ const VESSELS = [
   'cooklog-ai','booklog-ai','travlog-ai','healthlog-ai','petlog-ai',
   'parentlog-ai','doclog-ai','musiclog-ai','artistlog-ai','activelog-ai',
   'activeledger-ai','reallog-ai','playerlog-ai','cocapn-press',
-  'constraint-theory-web','deckboss-sheets','fleet-simulator',
-  'gravity-well-protocol','resonant-consensus','edge-equipment-catalog',
-  'edge-boarding-protocol','nexus-fracture-sim','kungfu-ai','mycelium-ai',
-  'baton-ai','crdt-sync','personality-engine','papermill','ui-design-system',
-  'the-mesh-fleet','model-quality-rubric','zero-shot-audit',
-  'forgetting-problem','forgiveness-function','git-coordination-protocol',
-  'actualizer-ai','craftmind-core','dream-engine','seed-ui',
-  'local-bridge','membership-api'
+  'kungfu-ai','mycelium-ai','baton-ai','crdt-sync','personality-engine',
+  'actualizer-ai','dream-engine','seed-ui','local-bridge','membership-api'
 ];
 
 async function checkVessel(name: string): Promise<VesselScore> {
