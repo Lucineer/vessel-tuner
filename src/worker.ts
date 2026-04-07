@@ -31,48 +31,60 @@ const VESSELS = [
 
 async function checkVessel(name: string): Promise<VesselScore> {
   const url = `https://${name}.casey-digennaro.workers.dev`;
+  const rawUrl = `https://raw.githubusercontent.com/Lucineer/${name}/master`;
   const issues: string[] = [];
   let health = 0, latency = 9999, size = 0, hasVesselJson = false, hasCsp = false, hasSecurity = false;
 
-  // Stage 1: Health & Latency
+  // Stage 1: Health (GitHub primary due to CF error 1042 on same-subdomain)
   const t0 = Date.now();
-  try {
-    const resp = await fetch(url + '/health', { signal: AbortSignal.timeout(10000) });
-    latency = Date.now() - t0;
-    health = resp.ok ? 200 : resp.status;
-    if (!resp.ok) issues.push(`health ${resp.status}`);
-  } catch { issues.push('health timeout'); latency = 10000; }
+  let repoExists = false;
+  for (const branch of ['master', 'main']) {
+    try {
+      const resp = await fetch(`https://raw.githubusercontent.com/Lucineer/${name}/${branch}/src/worker.ts`, { signal: AbortSignal.timeout(8000) });
+      if (resp.ok) { repoExists = true; latency = Date.now() - t0; break; }
+    } catch {}
+  }
+  if (repoExists) { health = 200; }
+  else { health = 404; issues.push('repo not found on GitHub'); }
 
-  // Stage 2: Response size (landing page)
-  try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    const body = await resp.text();
-    size = body.length;
-    if (size > 200000) issues.push(`oversized ${Math.round(size / 1024)}KB`);
-    if (size < 100) issues.push('empty or error page');
-  } catch { issues.push('landing fetch failed'); }
+  // Stage 2: Bundle size (from GitHub)
+  if (repoExists) {
+    try {
+      const resp = await fetch(`https://raw.githubusercontent.com/Lucineer/${name}/master/src/worker.ts`, { signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) await fetch(`https://raw.githubusercontent.com/Lucineer/${name}/main/src/worker.ts`, { signal: AbortSignal.timeout(8000) });
+      const body = await resp.text();
+      size = body.length;
+      if (size > 80000) issues.push(`worker.ts ${Math.round(size / 1024)}KB — consider splitting`);
+    } catch {}
+  }
 
-  // Stage 3: vessel.json
-  try {
-    const resp = await fetch(url + '/vessel.json', { signal: AbortSignal.timeout(8000) });
-    if (resp.ok) {
-      const data = await resp.json() as Record<string, unknown>;
-      hasVesselJson = true;
-      if (!data.name) issues.push('vessel.json missing name');
-      if (!data.capabilities) issues.push('vessel.json missing capabilities');
-    } else { issues.push('vessel.json ' + resp.status); }
-  } catch { issues.push('vessel.json timeout/invalid'); }
+  // Stage 3: vessel.json (from GitHub)
+  for (const branch of ['master', 'main']) {
+    try {
+      const resp = await fetch(`https://raw.githubusercontent.com/Lucineer/${name}/${branch}/vessel.json`, { signal: AbortSignal.timeout(8000) });
+      if (resp.ok) {
+        const data = await resp.json() as Record<string, unknown>;
+        hasVesselJson = true;
+        if (!data.name) issues.push('vessel.json missing name');
+        if (!data.capabilities) issues.push('vessel.json missing capabilities');
+        break;
+      }
+    } catch {}
+  }
+  if (!hasVesselJson) issues.push('vessel.json missing');
 
-  // Stage 4: Security headers (from landing)
-  try {
-    const resp = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8000) });
-    const csp = resp.headers.get('content-security-policy');
-    hasCsp = !!csp && !csp.includes('default-src *');
-    if (!hasCsp) issues.push('missing CSP');
-    const xfo = resp.headers.get('x-frame-options');
-    hasSecurity = !!xfo;
-    if (!hasSecurity) issues.push('missing X-Frame-Options');
-  } catch {}
+  // Stage 4: Security (check worker.ts for CSP pattern)
+  if (repoExists) {
+    try {
+      const resp = await fetch(`https://raw.githubusercontent.com/Lucineer/${name}/master/src/worker.ts`, { signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) await fetch(`https://raw.githubusercontent.com/Lucineer/${name}/main/src/worker.ts`, { signal: AbortSignal.timeout(8000) });
+      const body = await resp.text();
+      hasCsp = body.includes('content-security-policy') || body.includes('CSP');
+      if (!hasCsp) issues.push('no CSP in worker.ts');
+      hasSecurity = body.includes('X-Frame-Options') || body.includes('x-frame-options');
+      if (!hasSecurity) issues.push('no X-Frame-Options');
+    } catch {}
+  }
 
   // Score calculation (weighted)
   let score = 0;
