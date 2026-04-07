@@ -79,9 +79,10 @@ async function checkVessel(name: string): Promise<VesselScore> {
       const resp = await fetch(`https://raw.githubusercontent.com/Lucineer/${name}/master/src/worker.ts`, { signal: AbortSignal.timeout(8000) });
       if (!resp.ok) await fetch(`https://raw.githubusercontent.com/Lucineer/${name}/main/src/worker.ts`, { signal: AbortSignal.timeout(8000) });
       const body = await resp.text();
-      hasCsp = body.includes('content-security-policy') || body.includes('CSP');
+      const lower = body.toLowerCase();
+      hasCsp = lower.includes('content-security-policy');
       if (!hasCsp) issues.push('no CSP in worker.ts');
-      hasSecurity = body.includes('X-Frame-Options') || body.includes('x-frame-options');
+      hasSecurity = lower.includes('x-frame-options') || lower.includes("frame-ancestors");
       if (!hasSecurity) issues.push('no X-Frame-Options');
     } catch {}
   }
